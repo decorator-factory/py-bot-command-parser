@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "py-bot-command-parser"
+name = "bot_command_parser"
 version = "0.1.0"
 description = "Parser for simple chat bot commands"
 authors = ["decorator-factory <42166884+decorator-factory@users.noreply.github.com>"]
