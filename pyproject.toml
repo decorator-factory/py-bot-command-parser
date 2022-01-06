@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "py-bot-command-parser"
+version = "0.1.0"
+description = "Parser for simple chat bot commands"
+authors = ["decorator-factory <42166884+decorator-factory@users.noreply.github.com>"]
+license = "MPL-2.0"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+typing-extensions = "^4.0.1"
+
+[tool.poetry.dev-dependencies]
+pytest = "^6.2.5"
+coverage = "^6.2"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,19 @@
+{
+    "reportAssertAlwaysTrue": "error",
+    "strictDictionaryInference": true,
+    "strictListInference": true,
+    "strictSetInference": true,
+    "strictParameterNoneValue": true,
+    "reportOverlappingOverload": "information",
+    "reportIncompatibleMethodOverride": "error",
+    "reportIncompatibleVariableOverride": "error",
+    "reportFunctionMemberAccess": "error",
+    "reportPrivateImportUsage": "warning",
+    "reportImportCycles": "error",
+    "reportUntypedFunctionDecorator": "information",
+    "reportUnknownArgumentType": "warning",
+    "reportUnknownLambdaType": "warning",
+    "reportUnknownVariableType": "warning",
+    "reportUnknownMemberType": "warning",
+    "reportUnknownParameterType": "warning"
+}

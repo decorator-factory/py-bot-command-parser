@@ -1,0 +1,191 @@
+from collections import defaultdict
+import re
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Generic, Sequence, TypeVar, Union
+if TYPE_CHECKING:
+    from typing_extensions import TypeVarTuple, Unpack
+else:
+    from collections import defaultdict
+    TypeVarTuple = lambda name: None
+    Unpack = defaultdict(lambda: TypeVar("__"))
+
+
+P = TypeVarTuple("P")
+A = TypeVar("A", covariant=True)
+
+
+@dataclass(frozen=True)
+class OpaqueDescription:
+    message: str
+
+
+@dataclass(frozen=True)
+class UnionDescription:
+    variants: Sequence["Description"]
+
+
+@dataclass(frozen=True)
+class TupleDescription:
+    elements: Sequence["Description"]
+
+
+@dataclass(frozen=True)
+class AnnotatedDescription:
+    wrapped: "Description"
+    annotation: str
+
+
+@dataclass(frozen=True)
+class EmptyDescription:
+    pass
+
+
+Description = Union[
+    OpaqueDescription,
+    UnionDescription,
+    TupleDescription,
+    AnnotatedDescription,
+    EmptyDescription,
+]
+
+
+class ParseError(ABC, Exception):
+    @abstractmethod
+    def describe(self) -> str:
+        raise NotImplementedError
+
+    @abstractmethod
+    def nest(self, key: object, /) -> "ParseError":
+        raise NotImplementedError
+
+
+@dataclass
+class SimpleParseError(ParseError):
+    message: str
+
+    def __post_init__(self):
+        super().__init__(self.message)
+
+    def describe(self) -> str:
+        return self.message
+
+    def nest(self, key: object, /) -> ParseError:
+        return NestedParseError((key,), self)
+
+
+@dataclass
+class NestedParseError(ParseError):
+    path: tuple[object, ...]
+    error: ParseError
+
+    def __post_init__(self):
+        super().__init__(self.path, self.error)
+
+    def describe(self) -> str:
+        path = ".".join(map(repr, self.path)) or "<root>"
+        return "at {0!r}: {1!r}".format(path, self.error.describe())
+
+    def nest(self, key: object, /) -> ParseError:
+        return NestedParseError((*self.path, key), self.error)
+
+
+
+class Converter(ABC, Generic[A]):
+    @abstractmethod
+    def description(self) -> Description:
+        raise NotImplementedError
+
+    @abstractmethod
+    def parse(self, source: str, /) -> tuple[str, A]:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class Int(Converter[int]):
+    def description(self) -> Description:
+        return OpaqueDescription("signed integer")
+
+    def parse(self, source: str, /) -> tuple[str, int]:
+        match = re.match(r"([-+]?\d+)", source.lstrip())
+        if match is None:
+            raise SimpleParseError("Expected an integer")
+        number = int(match[1])
+        rest = source[match.end(1):].lstrip()
+        return rest, number
+
+
+@dataclass(frozen=True)
+class Word(Converter[str]):
+    def description(self) -> Description:
+        return OpaqueDescription("word (without spaces)")
+
+    def parse(self, source: str, /) -> tuple[str, str]:
+        match = re.match(r"(\S+)", source.lstrip())
+        if match is None:
+            raise SimpleParseError("Expected at least one non-space character")
+        word = match[1]
+        rest = source[match.end(1):].lstrip()
+        return rest, word
+
+
+@dataclass(frozen=True)
+class Rest(Converter[str]):
+    def description(self) -> Description:
+        return OpaqueDescription("rest of the string")
+
+    def parse(self, source: str, /) -> tuple[str, str]:
+        return "", source
+
+
+@dataclass(frozen=True)
+class Nothing(Converter[None]):
+    def description(self) -> Description:
+        return EmptyDescription()
+
+    def parse(self, source: str, /) -> tuple[str, None]:
+        return source, None
+
+
+@dataclass(frozen=True)
+class Seq(Generic[Unpack[P]], Converter[tuple[Unpack[P]]]):
+    _converters: tuple[Converter[Any], ...] = ()  # tuple[Converter[T] for T in P]
+
+    if TYPE_CHECKING:
+        def __new__(cls) -> "Seq[()]": ...
+        def __init__(self) -> None: ...
+
+    def description(self) -> Description:
+        return AnnotatedDescription(
+            TupleDescription([conv.description() for conv in self._converters]),
+            annotation="greedy",
+        )
+
+    def parse(self, source: str, /) -> tuple[str, tuple[Unpack[P]]]:
+        results: list[Any] = []
+
+        rest = source.lstrip()
+        for pos, converter in enumerate(self._converters, start=1):
+            try:
+                rest, parsed = converter.parse(rest)
+                results.append(parsed)
+            except ParseError as e:
+                raise e.nest(pos)
+
+        return rest.lstrip(), tuple(results)  # type: ignore
+
+    def add(self, converter: Converter[A]) -> "Seq[Unpack[P], A]":
+        return Seq((*self._converters, converter))  # type: ignore
+
+    def __add__(self, converter: Converter[A]) -> "Seq[Unpack[P], A]":
+        return self.add(converter)
+
+
+integer = Int()
+word = Word()
+rest = Rest()
+nothing = Nothing()
+seq = Seq()
+
+
+repeat_with_comment = seq + integer + word + rest
