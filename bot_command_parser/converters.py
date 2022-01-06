@@ -100,6 +100,14 @@ class Converter(ABC, Generic[A]):
     def parse(self, source: str, /) -> tuple[str, A]:
         raise NotImplementedError
 
+    def matches(self, source: str, /) -> bool:
+        try:
+            self.parse(source)
+        except ParseError:
+            return False
+        else:
+            return True
+
 
 @dataclass(frozen=True)
 class Int(Converter[int]):
@@ -107,7 +115,8 @@ class Int(Converter[int]):
         return OpaqueDescription("signed integer")
 
     def parse(self, source: str, /) -> tuple[str, int]:
-        match = re.match(r"([-+]?\d+)", source.lstrip())
+        source = source.lstrip()
+        match = re.match(r"([-+]?\d+)", source)
         if match is None:
             raise SimpleParseError("Expected an integer")
         number = int(match[1])
@@ -121,7 +130,8 @@ class Word(Converter[str]):
         return OpaqueDescription("word (without spaces)")
 
     def parse(self, source: str, /) -> tuple[str, str]:
-        match = re.match(r"(\S+)", source.lstrip())
+        source = source.lstrip()
+        match = re.match(r"(\S+)", source)
         if match is None:
             raise SimpleParseError("Expected at least one non-space character")
         word = match[1]
@@ -181,11 +191,35 @@ class Seq(Generic[Unpack[P]], Converter[tuple[Unpack[P]]]):
         return self.add(converter)
 
 
+L = TypeVar("L", bound=str)
+
+
+@dataclass(frozen=True)
+class Lit(Converter[L]):
+    value: L
+
+    def __post_init__(self):
+        if __debug__ and any(map(str.isspace, self.value)):
+            raise ValueError("Literal cannot contain spaces")
+
+    def description(self) -> Description:
+        return OpaqueDescription("literal {0!r}".format(self.value))
+
+    def parse(self, source: str, /) -> tuple[str, L]:
+        source = source.lstrip()
+        match = re.match(r"(\S+)", source)
+        if match is None:
+            raise SimpleParseError("Expected literal: {0}".format(self.value))
+        word = match[1]
+        if word != self.value:
+            raise SimpleParseError("Expected literal: {0}, got: {1}".format(self.value, word))
+        rest = source[match.end(1):].lstrip()
+        return rest, word  # type: ignore
+
+
 integer = Int()
 word = Word()
 rest = Rest()
 nothing = Nothing()
 seq = Seq()
-
-
-repeat_with_comment = seq + integer + word + rest
+literal = Lit

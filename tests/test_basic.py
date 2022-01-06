@@ -97,3 +97,8 @@ def test_seq_not_enough_elements():
         parser.parse("42")
     assert e.value == C.NestedParseError((2,), C.SimpleParseError("Expected an integer"))
 
+# Literal
+
+
+def test_literal_parses_a_literal_string():
+    assert C.literal("foo").parse("foo bar baz") == ("bar baz", "foo")
