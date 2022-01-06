@@ -91,7 +91,7 @@ class NestedParseError(ParseError):
 
 
 
-class Converter(ABC, Generic[A]):
+class Parser(ABC, Generic[A]):
     @abstractmethod
     def description(self) -> Description:
         raise NotImplementedError
@@ -110,7 +110,7 @@ class Converter(ABC, Generic[A]):
 
 
 @dataclass(frozen=True)
-class Int(Converter[int]):
+class Int(Parser[int]):
     def description(self) -> Description:
         return OpaqueDescription("signed integer")
 
@@ -125,7 +125,7 @@ class Int(Converter[int]):
 
 
 @dataclass(frozen=True)
-class Word(Converter[str]):
+class Word(Parser[str]):
     def description(self) -> Description:
         return OpaqueDescription("word (without spaces)")
 
@@ -140,7 +140,7 @@ class Word(Converter[str]):
 
 
 @dataclass(frozen=True)
-class Rest(Converter[str]):
+class Rest(Parser[str]):
     def description(self) -> Description:
         return OpaqueDescription("rest of the string")
 
@@ -149,7 +149,7 @@ class Rest(Converter[str]):
 
 
 @dataclass(frozen=True)
-class Nothing(Converter[None]):
+class Nothing(Parser[None]):
     def description(self) -> Description:
         return EmptyDescription()
 
@@ -158,8 +158,8 @@ class Nothing(Converter[None]):
 
 
 @dataclass(frozen=True)
-class Seq(Generic[Unpack[P]], Converter[tuple[Unpack[P]]]):
-    _converters: tuple[Converter[Any], ...] = ()  # tuple[Converter[T] for T in P]
+class Seq(Generic[Unpack[P]], Parser[tuple[Unpack[P]]]):
+    _converters: tuple[Parser[Any], ...] = ()  # tuple[Converter[T] for T in P]
 
     if TYPE_CHECKING:
         def __new__(cls) -> "Seq[()]": ...
@@ -184,10 +184,10 @@ class Seq(Generic[Unpack[P]], Converter[tuple[Unpack[P]]]):
 
         return rest.lstrip(), tuple(results)  # type: ignore
 
-    def add(self, converter: Converter[A]) -> "Seq[Unpack[P], A]":
+    def add(self, converter: Parser[A]) -> "Seq[Unpack[P], A]":
         return Seq((*self._converters, converter))  # type: ignore
 
-    def __add__(self, converter: Converter[A]) -> "Seq[Unpack[P], A]":
+    def __add__(self, converter: Parser[A]) -> "Seq[Unpack[P], A]":
         return self.add(converter)
 
 
@@ -195,7 +195,7 @@ L = TypeVar("L", bound=str)
 
 
 @dataclass(frozen=True)
-class Lit(Converter[L]):
+class Lit(Parser[L]):
     value: L
 
     def __post_init__(self):

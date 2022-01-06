@@ -1,4 +1,4 @@
-from bot_command_parser.converters import seq, word, integer, literal, ParseError
+from bot_command_parser.parsers import seq, word, integer, literal, ParseError
 
 
 quit = literal("/quit")
