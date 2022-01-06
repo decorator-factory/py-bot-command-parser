@@ -34,5 +34,8 @@ parsers.NestedParseError: ((3,), SimpleParseError(message='Expected an integer')
 
 # Typing
 
+![image](https://user-images.githubusercontent.com/42166884/148468374-a1c3a40e-9676-4581-aceb-e687cc7fe7b9.png)
+
+
 So far it only works with `pyright` because it uses bleeding-edge typing features.
 But you can contribute a `mypy` plugin if you want :-)
