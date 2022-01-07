@@ -97,8 +97,28 @@ def test_seq_not_enough_elements():
         parser.parse("42")
     assert e.value == P.NestedParseError((2,), P.SimpleParseError("Expected an integer"))
 
+
 # Literal
 
 
 def test_literal_parses_a_literal_string():
     assert P.literal("foo").parse("foo bar baz") == ("bar baz", "foo")
+
+
+# Monadic methods
+
+
+def test_confirm_command_with_same_word():
+    same_word = P.word.flat_map(P.literal)
+    confirm = P.seq + P.literal("/confirm") + same_word
+    assert confirm.parse("/confirm p4ssw0rd p4ssw0rd") == ("", ("/confirm", "p4ssw0rd"))
+
+
+def test_confirm_command_with_different_word():
+    same_word = P.word.flat_map(P.literal)
+    confirm = P.seq + P.literal("/confirm") + same_word
+
+    with pytest.raises(P.NestedParseError) as e:
+        confirm.parse("/confirm p4ssw0rd p4sw0rd")
+
+    assert e.value == P.NestedParseError((2,), P.SimpleParseError(message='Expected literal: p4ssw0rd, got: p4sw0rd'))

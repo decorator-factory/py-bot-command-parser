@@ -2,7 +2,7 @@ from collections import defaultdict
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Generic, Sequence, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Callable, Generic, Optional, Sequence, TypeVar, Union
 if TYPE_CHECKING:
     from typing_extensions import TypeVarTuple, Unpack
 else:
@@ -13,6 +13,7 @@ else:
 
 P = TypeVarTuple("P")
 A = TypeVar("A", covariant=True)
+B = TypeVar("B")
 
 
 @dataclass(frozen=True)
@@ -90,7 +91,6 @@ class NestedParseError(ParseError):
         return NestedParseError((*self.path, key), self.error)
 
 
-
 class Parser(ABC, Generic[A]):
     @abstractmethod
     def description(self) -> Description:
@@ -107,6 +107,67 @@ class Parser(ABC, Generic[A]):
             return False
         else:
             return True
+
+    def map(self, fn: Callable[[A], B]) -> "MappingParser[A, B]":
+        return MappingParser(self, fn)
+
+    def flatten(self: "Parser[Parser[B]]") -> "NestedParser[B]":
+        return NestedParser(self)
+
+    def flat_map(self, fn: Callable[[A], "Parser[B]"]) -> "FlatMappingParser[A, B]":
+        return FlatMappingParser(self, fn)
+
+
+@dataclass(frozen=True)
+class PureParser(Parser[A]):
+    value: A
+    note: Optional[str] = None
+
+    def description(self) -> Description:
+        if self.note is None:
+            return EmptyDescription()
+        return OpaqueDescription(self.note)
+
+    def parse(self, source: str, /) -> tuple[str, A]:
+        return source, self.value
+
+
+@dataclass(frozen=True)
+class MappingParser(Generic[A, B], Parser[B]):
+    wrapped: Parser[A]
+    mapper: Callable[[A], B]
+
+    def description(self) -> Description:
+        return self.wrapped.description()
+
+    def parse(self, source: str, /) -> tuple[str, B]:
+        rest, value = self.wrapped.parse(source)
+        return rest, self.mapper(value)
+
+
+@dataclass(frozen=True)
+class NestedParser(Parser[A]):
+    wrapped: Parser[Parser[A]]
+
+    def description(self) -> Description:
+        return self.wrapped.description()
+
+    def parse(self, source: str, /) -> tuple[str, A]:
+        rest, parser = self.wrapped.parse(source)
+        rest2, value = parser.parse(rest)
+        return rest2, value
+
+
+@dataclass(frozen=True)
+class FlatMappingParser(Generic[A, B], Parser[B]):
+    wrapped: Parser[A]
+    mapper: Callable[[A], Parser[B]]
+
+    def description(self) -> Description:
+        return self.wrapped.description()
+
+    def parse(self, source: str, /) -> tuple[str, B]:
+        return self.wrapped.map(self.mapper).flatten().parse(source)
 
 
 @dataclass(frozen=True)
@@ -191,12 +252,9 @@ class Seq(Generic[Unpack[P]], Parser[tuple[Unpack[P]]]):
         return self.add(converter)
 
 
-L = TypeVar("L", bound=str)
-
-
 @dataclass(frozen=True)
-class Lit(Parser[L]):
-    value: L
+class Lit(Parser[str]):
+    value: str
 
     def __post_init__(self):
         if __debug__ and any(map(str.isspace, self.value)):
@@ -205,7 +263,7 @@ class Lit(Parser[L]):
     def description(self) -> Description:
         return OpaqueDescription("literal {0!r}".format(self.value))
 
-    def parse(self, source: str, /) -> tuple[str, L]:
+    def parse(self, source: str, /) -> tuple[str, str]:
         source = source.lstrip()
         match = re.match(r"(\S+)", source)
         if match is None:
@@ -223,3 +281,4 @@ rest = Rest()
 nothing = Nothing()
 seq = Seq()
 literal = Lit
+pure = PureParser
