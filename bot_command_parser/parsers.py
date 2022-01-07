@@ -108,14 +108,14 @@ class Parser(ABC, Generic[A]):
         else:
             return True
 
-    def map(self, fn: Callable[[A], B]) -> "MappingParser[A, B]":
+    def map(self, fn: Callable[[A], B]) -> "Parser[B]":
         return MappingParser(self, fn)
 
-    def flatten(self: "Parser[Parser[B]]") -> "NestedParser[B]":
+    def flatten(self: "Parser[Parser[B]]") -> "Parser[B]":
         return NestedParser(self)
 
-    def flat_map(self, fn: Callable[[A], "Parser[B]"]) -> "FlatMappingParser[A, B]":
-        return FlatMappingParser(self, fn)
+    def flat_map(self, fn: Callable[[A], "Parser[B]"]) -> "Parser[B]":
+        return self.map(fn).flatten()
 
 
 @dataclass(frozen=True)
@@ -156,18 +156,6 @@ class NestedParser(Parser[A]):
         rest, parser = self.wrapped.parse(source)
         rest2, value = parser.parse(rest)
         return rest2, value
-
-
-@dataclass(frozen=True)
-class FlatMappingParser(Generic[A, B], Parser[B]):
-    wrapped: Parser[A]
-    mapper: Callable[[A], Parser[B]]
-
-    def description(self) -> Description:
-        return self.wrapped.description()
-
-    def parse(self, source: str, /) -> tuple[str, B]:
-        return self.wrapped.map(self.mapper).flatten().parse(source)
 
 
 @dataclass(frozen=True)
