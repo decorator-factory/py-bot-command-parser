@@ -122,3 +122,54 @@ def test_confirm_command_with_different_word():
         confirm.parse("/confirm p4ssw0rd p4sw0rd")
 
     assert e.value == P.NestedParseError((2,), P.SimpleParseError(message='Expected literal: p4ssw0rd, got: p4sw0rd'))
+
+
+# Parsing a 2d point
+
+
+def test_point_with_callback_hell():
+    from bot_command_parser.parsers import exact, integer, pure
+
+    point = exact("(").flat_map(
+        lambda _: integer.flat_map(
+            lambda x: exact(",").flat_map(
+                lambda _: integer.flat_map(
+                    lambda y: exact(")").flat_map(
+                        lambda _: pure((x, y))
+        )))))
+    assert point.parse("(3, -51)") == ("", (3, -51))
+
+
+def test_point_with_helper_methods():
+    from bot_command_parser.parsers import exact, integer
+
+    def make_point(x: int):
+        def inner(y: int):
+            return (x, y)
+        return inner
+
+    point = (
+        exact("(")
+        .after(integer)
+        .map(make_point)
+        .apply(
+            exact(",")
+            .after(integer)
+            .before(exact(")")))
+    )
+    assert point.parse("(3, -51)") == ("", (3, -51))
+
+
+def test_point_with_do_notation():
+    from bot_command_parser.parsers import do, exact, integer
+
+    @do
+    async def point() -> tuple[int, int]:
+        await exact("(")
+        x = await integer
+        await exact(",")
+        y = await integer
+        await exact(")")
+        return (x, y)
+
+    assert point.parse("(3, -51)") == ("", (3, -51))

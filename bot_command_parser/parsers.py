@@ -2,7 +2,7 @@ from collections import defaultdict
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Generic, Optional, Sequence, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Generic, Generator, Optional, Sequence, TypeVar, Union
 if TYPE_CHECKING:
     from typing_extensions import TypeVarTuple, Unpack
 else:
@@ -14,6 +14,7 @@ else:
 P = TypeVarTuple("P")
 A = TypeVar("A", covariant=True)
 B = TypeVar("B")
+C = TypeVar("C")
 
 
 @dataclass(frozen=True)
@@ -116,6 +117,19 @@ class Parser(ABC, Generic[A]):
 
     def flat_map(self, fn: Callable[[A], "Parser[B]"]) -> "Parser[B]":
         return self.map(fn).flatten()
+
+    def after(self, right: "Parser[B]") -> "Parser[B]":
+        return self.flat_map(lambda _a: right)
+
+    def before(self, right: "Parser[Any]") -> "Parser[A]":
+        return self.flat_map(lambda a: right.map(lambda _: a))
+
+    def apply(self: "Parser[Callable[[B], C]]", arg: "Parser[B]") -> "Parser[C]":
+        return self.flat_map(arg.map)
+
+    def __await__(self) -> Generator[Any, Any, A]:
+        parsed = yield self
+        return parsed
 
 
 @dataclass(frozen=True)
@@ -263,10 +277,48 @@ class Lit(Parser[str]):
         return rest, word  # type: ignore
 
 
+@dataclass(frozen=True)
+class Exact(Parser[str]):
+    value: str
+
+    def description(self) -> Description:
+        return OpaqueDescription("exactly {0!r}".format(self.value))
+
+    def parse(self, source: str, /) -> tuple[str, str]:
+        source = source.lstrip()
+        rest = source.removeprefix(self.value)
+        if rest == source:
+            raise SimpleParseError("Expected exactly: {0!r}".format(self.value))
+        return rest, self.value
+
+
+@dataclass(frozen=True)
+class RunDo(Parser[A]):
+    fn: Callable[[], Coroutine[Any, Any, A]]
+
+    def description(self) -> Description:
+        return EmptyDescription()
+
+    def parse(self, source: str, /) -> tuple[str, A]:
+        coro = self.fn()
+
+        rest = source
+        data = None
+        while True:
+            try:
+                parser: Parser[Any] = coro.send(data)
+            except StopIteration as e:
+                return rest, e.value
+            else:
+                rest, data = parser.parse(rest)
+
+
 integer = Int()
 word = Word()
 rest = Rest()
 nothing = Nothing()
 seq = Seq()
 literal = Lit
+exact = Exact
 pure = PureParser
+do = RunDo
